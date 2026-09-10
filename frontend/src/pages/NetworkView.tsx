@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Station } from '../types';
 import { StationDetailModal } from './StationDetailModal';
+import { DigitalTwinView } from '../components/digitaltwin/DigitalTwinView';
 import {
   DISTRICT_PATHS,
   NEIGHBOR_STATES,
@@ -37,6 +38,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({
   onSelectStation,
   onNavigateToLive
 }) => {
+  const [activeDigitalTwinStation, setActiveDigitalTwinStation] = useState<Station | null>(null);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [hoveredStationId, setHoveredStationId] = useState<string | null>(null);
 
@@ -102,6 +104,24 @@ export const NetworkView: React.FC<NetworkViewProps> = ({
   const warningCount = 2;
   const onlineCount = 7;
   const offlineCount = 0;
+
+  if (activeDigitalTwinStation) {
+    return (
+      <DigitalTwinView
+        station={activeDigitalTwinStation}
+        allStations={stations}
+        onSelectStation={(id) => {
+          const next = stations.find((s) => s.station_id === id);
+          if (next) {
+            setActiveDigitalTwinStation(next);
+            onSelectStation(id);
+          }
+        }}
+        onBackToMap={() => setActiveDigitalTwinStation(null)}
+        onNavigateToLive={onNavigateToLive}
+      />
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-[#D9DEE5] shadow-xs p-4 sm:p-6 space-y-4 font-sans select-none">
@@ -680,8 +700,20 @@ export const NetworkView: React.FC<NetworkViewProps> = ({
                   onMouseEnter={() => setHoveredStationId(id)}
                   onMouseLeave={() => setHoveredStationId(null)}
                   onClick={() => {
-                    if (station) setSelectedStation(station);
-                    else onSelectStation(id);
+                    const targetStation: Station = station || {
+                      station_id: id,
+                      name: `AWS ${pos.code}`,
+                      location: `${pos.code}, Maharashtra`,
+                      district: pos.code.split('-')[0],
+                      latitude: 19.5,
+                      longitude: 75.5,
+                      elevation: 550,
+                      status: isNagpur ? 'CRITICAL' : isWarning ? 'WARNING' : isOffline ? 'OFFLINE' : 'HEALTHY',
+                      health_score: score,
+                      reliability: score
+                    };
+                    setActiveDigitalTwinStation(targetStation);
+                    onSelectStation(id);
                   }}
                 >
                   {/* --- A. NAGPUR-04 CRITICAL RADAR RINGS (STATIC, ZERO MOVING ARTIFACTS) --- */}
@@ -774,6 +806,53 @@ export const NetworkView: React.FC<NetworkViewProps> = ({
                       {Math.round(score)}%
                     </text>
                   </g>
+
+                  {/* Hover Card Tooltip matching reference design */}
+                  {isHovered && (
+                    <g transform={`translate(${pos.x + 12}, ${pos.y - 66})`} className="pointer-events-none">
+                      <rect
+                        x="0"
+                        y="0"
+                        width="128"
+                        height="44"
+                        rx="6"
+                        fill="#FFFFFF"
+                        stroke={statusColor}
+                        strokeWidth="1.5"
+                        filter="url(#pillShadow)"
+                      />
+                      <text
+                        x="8"
+                        y="14"
+                        fill="#12355B"
+                        fontSize="10"
+                        fontWeight="bold"
+                        fontFamily="sans-serif"
+                      >
+                        {pos.code}
+                      </text>
+                      <text
+                        x="8"
+                        y="26"
+                        fill={statusColor}
+                        fontSize="9"
+                        fontWeight="600"
+                        fontFamily="sans-serif"
+                      >
+                        Status: {isNagpur ? 'Critical' : isWarning ? 'Warning' : isOffline ? 'Offline' : 'Healthy'}
+                      </text>
+                      <text
+                        x="8"
+                        y="38"
+                        fill="#0284C7"
+                        fontSize="8.5"
+                        fontWeight="bold"
+                        fontFamily="sans-serif"
+                      >
+                        Click to view 3D Station →
+                      </text>
+                    </g>
+                  )}
                 </g>
               );
             })}
