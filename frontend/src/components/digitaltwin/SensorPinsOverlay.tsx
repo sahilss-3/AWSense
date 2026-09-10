@@ -31,6 +31,7 @@ interface SensorPinsOverlayProps {
   hoveredSensorId: string | null;
   onHoverSensor: (id: string | null) => void;
   pinsData: Record<string, SensorPinInfo>;
+  showSensorLabels?: boolean;
 }
 
 export const SensorPinsOverlay: React.FC<SensorPinsOverlayProps> = ({
@@ -39,11 +40,38 @@ export const SensorPinsOverlay: React.FC<SensorPinsOverlayProps> = ({
   onSelectSensor,
   hoveredSensorId,
   onHoverSensor,
-  pinsData
+  pinsData,
+  showSensorLabels = false
 }) => {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-10">
-      {Object.entries(screenPositions).map(([id, pos]) => {
+      {/* Minimal sleek hover tooltip when Sensor Labels are OFF */}
+      {!showSensorLabels && hoveredSensorId && screenPositions[hoveredSensorId]?.visible && pinsData[hoveredSensorId] && (
+        <div
+          className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3 px-3 py-1.5 rounded-lg bg-[#0F172A]/90 backdrop-blur-md border border-white/20 text-white shadow-xl flex items-center gap-2 z-30 transition-all"
+          style={{
+            left: `${screenPositions[hoveredSensorId].x}px`,
+            top: `${screenPositions[hoveredSensorId].y - 10}px`
+          }}
+        >
+          <div
+            className={`w-2 h-2 rounded-full ${
+              pinsData[hoveredSensorId].isAnomaly
+                ? 'bg-[#EF4444] animate-ping'
+                : pinsData[hoveredSensorId].status === 'Warning'
+                ? 'bg-[#F59E0B]'
+                : 'bg-[#10B981]'
+            }`}
+          />
+          <span className="text-xs font-bold font-sans">{pinsData[hoveredSensorId].name}</span>
+          <span className="text-[10px] text-slate-300 font-mono font-semibold">
+            ({pinsData[hoveredSensorId].value})
+          </span>
+        </div>
+      )}
+
+      {/* Full floating callout cards and leader lines when Sensor Labels are ON */}
+      {showSensorLabels && Object.entries(screenPositions).map(([id, pos]) => {
         if (!pos.visible) return null;
 
         const pin = pinsData[id];

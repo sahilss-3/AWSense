@@ -8,6 +8,8 @@ import {
   Maximize2,
   Minimize2,
   MousePointer2,
+  Eye,
+  EyeOff,
   Info
 } from 'lucide-react';
 import { createAWSStationModel, AWSModelRefs } from './AWSStationModel';
@@ -41,6 +43,7 @@ export const Station3DCanvas: React.FC<Station3DCanvasProps> = ({
   >({});
 
   // 3D Controls state
+  const [showSensorLabels, setShowSensorLabels] = useState<boolean>(false);
   const [autoRotate, setAutoRotate] = useState<boolean>(false);
   const [isExploded, setIsExploded] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -219,6 +222,26 @@ export const Station3DCanvas: React.FC<Station3DCanvasProps> = ({
     modelRefsRef.current = modelRefs;
     scene.add(modelRefs.group);
 
+    // Hit-testing group for direct 3D physical sensor interaction (click & hover)
+    const hitSpheresGroup = new THREE.Group();
+    hitSpheresGroup.name = 'hitSpheres';
+    const hitSphereMap: Record<string, THREE.Mesh> = {};
+
+    for (const [sensorId, anchorPos] of Object.entries(modelRefs.sensorAnchorPoints)) {
+      const hitGeom = new THREE.SphereGeometry(0.35, 12, 12);
+      const hitMat = new THREE.MeshBasicMaterial({
+        visible: false,
+        transparent: true,
+        opacity: 0
+      });
+      const hitMesh = new THREE.Mesh(hitGeom, hitMat);
+      hitMesh.position.copy(anchorPos);
+      hitMesh.userData = { sensorId };
+      hitSpheresGroup.add(hitMesh);
+      hitSphereMap[sensorId] = hitMesh;
+    }
+    scene.add(hitSpheresGroup);
+
     // 8. 60 FPS Render & Physics Animation Loop
     const clock = clockRef.current;
     clock.start();
@@ -273,6 +296,22 @@ export const Station3DCanvas: React.FC<Station3DCanvasProps> = ({
           ? item.initialPos.clone().add(item.explodedOffset)
           : item.initialPos;
         item.object.position.lerp(target, 0.08);
+      }
+
+      // Update hit spheres positions for exploded view
+      for (const [sId, hitMesh] of Object.entries(hitSphereMap)) {
+        const initialPos = modelRefs.sensorAnchorPoints[sId];
+        if (initialPos) {
+          hitMesh.position.copy(initialPos);
+          if (isExploded) {
+            if (sId === 'temperature' || sId === 'humidity') hitMesh.position.x -= 0.55;
+            else if (sId === 'pressure') hitMesh.position.x += 0.55;
+            else if (sId === 'wind_speed') { hitMesh.position.x -= 0.45; hitMesh.position.y += 0.45; }
+            else if (sId === 'wind_direction') { hitMesh.position.x += 0.45; hitMesh.position.y += 0.45; }
+            else if (sId === 'solar_panel') { hitMesh.position.x -= 0.6; hitMesh.position.z += 0.6; }
+            else if (sId === 'data_logger') { hitMesh.position.x += 0.35; hitMesh.position.z += 0.55; }
+          }
+        }
       }
 
       // ===================================================================
@@ -341,6 +380,58 @@ export const Station3DCanvas: React.FC<Station3DCanvasProps> = ({
 
     animate();
 
+    // Direct 3D Canvas Sensor Raycasting for click & hover interaction
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let pointerDownPos = { x: 0, y: 0 };
+
+    const handlePointerDown = (e: MouseEvent) => {
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+    };
+
+    const handlePointerMove = (e: MouseEvent) => {
+      if (!canvas || !camera) return;
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(hitSpheresGroup.children, false);
+      if (intersects.length > 0) {
+        const hitId = intersects[0].object.userData.sensorId;
+        if (hitId) {
+          canvas.style.cursor = 'pointer';
+          onHoverSensor(hitId);
+          return;
+        }
+      }
+      canvas.style.cursor = 'grab';
+      onHoverSensor(null);
+    };
+
+    const handlePointerUp = (e: MouseEvent) => {
+      const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+      if (dist > 6) return; // Camera orbit drag, not a single click
+
+      if (!canvas || !camera) return;
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(hitSpheresGroup.children, false);
+      if (intersects.length > 0) {
+        const hitId = intersects[0].object.userData.sensorId;
+        if (hitId) {
+          onSelectSensor(hitId);
+        }
+      }
+    };
+
+    canvas.addEventListener('mousedown', handlePointerDown);
+    canvas.addEventListener('mousemove', handlePointerMove);
+    canvas.addEventListener('mouseup', handlePointerUp);
+
     // Window resize observer
     const handleResize = () => {
       if (!container || !renderer || !camera) return;
@@ -357,6 +448,9 @@ export const Station3DCanvas: React.FC<Station3DCanvasProps> = ({
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
       resizeObserver.disconnect();
+      canvas.removeEventListener('mousedown', handlePointerDown);
+      canvas.removeEventListener('mousemove', handlePointerMove);
+      canvas.removeEventListener('mouseup', handlePointerUp);
       controls.dispose();
       renderer.dispose();
     };
@@ -369,9 +463,9 @@ export const Station3DCanvas: React.FC<Station3DCanvasProps> = ({
         isFullscreen ? 'fixed inset-0 z-50 rounded-none h-screen' : 'h-[540px] lg:h-[580px]'
       }`}
       style={{
-        backgroundImage: 'url(/aws_hero_4k.jpg)',
+        backgroundImage: 'url(/digital_twin_bg.jpg)',
         backgroundSize: 'cover',
-        backgroundPosition: 'center 45%'
+        backgroundPosition: 'center 40%'
       }}
     >
       {/* Subtle atmospheric gradient overlay */}
@@ -388,6 +482,7 @@ export const Station3DCanvas: React.FC<Station3DCanvasProps> = ({
         hoveredSensorId={hoveredSensorId}
         onHoverSensor={onHoverSensor}
         pinsData={pinsData}
+        showSensorLabels={showSensorLabels}
       />
 
       {/* =================================================================== */}
@@ -401,11 +496,36 @@ export const Station3DCanvas: React.FC<Station3DCanvasProps> = ({
           <span className="text-white/30">•</span>
           <span>Scroll to zoom</span>
           <span className="text-white/30">•</span>
-          <span>Click on a sensor for details</span>
+          <span>Click sensor to inspect</span>
         </div>
 
         {/* Right Action Buttons */}
         <div className="flex items-center gap-1.5 pointer-events-auto">
+          {/* Sensor Labels Visibility Toggle (Default: OFF) */}
+          <button
+            onClick={() => setShowSensorLabels((prev) => !prev)}
+            className={`flex items-center gap-1.5 backdrop-blur-md text-[11px] font-semibold px-3 py-1.5 rounded-lg border transition-all shadow-md active:scale-95 ${
+              showSensorLabels
+                ? 'bg-[#10B981] text-white border-emerald-400 ring-2 ring-emerald-400/30'
+                : 'bg-[#0F172A]/85 hover:bg-[#1E293B] text-white/90 border-white/15'
+            }`}
+            title="Toggle visibility of floating sensor data labels"
+          >
+            {showSensorLabels ? (
+              <Eye size={12} className="text-white" />
+            ) : (
+              <EyeOff size={12} className="text-slate-400" />
+            )}
+            <span>Sensor Labels</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                showSensorLabels ? 'bg-white/25 text-white' : 'bg-white/10 text-slate-300'
+              }`}
+            >
+              {showSensorLabels ? 'ON' : 'OFF'}
+            </span>
+          </button>
+
           <button
             onClick={handleResetView}
             className="flex items-center gap-1.5 bg-[#0F172A]/85 hover:bg-[#1E293B] backdrop-blur-md text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-white/15 transition-all shadow-md active:scale-95"
