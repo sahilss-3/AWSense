@@ -25,6 +25,7 @@ import { ReportsPage } from './pages/Reports';
 import { SimulationLab } from './pages/SimulationLab';
 import { SettingsPage } from './pages/Settings';
 import { LoginPage } from './pages/LoginPage';
+import { DigitalTwinView } from './components/digitaltwin/DigitalTwinView';
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -37,7 +38,7 @@ export function App() {
     const hash = window.location.hash.replace('#', '');
     const validTabs: NavItem[] = [
       'command-center', 'live-monitoring', 'stations', 'anomalies',
-      'anomaly-investigation', 'sensor-health', 'network-view',
+      'anomaly-investigation', 'sensor-health', 'network-view', 'digital-twin',
       'historical-analysis', 'alerts', 'ai-insights', 'reports', 'simulation-lab', 'settings'
     ];
     return validTabs.includes(hash as NavItem) ? (hash as NavItem) : 'command-center';
@@ -204,6 +205,23 @@ export function App() {
         <NetworkView
           stations={stations}
           onSelectStation={setSelectedStationId}
+          onNavigateToLive={(id) => {
+            setSelectedStationId(id);
+            setCurrentTab('live-monitoring');
+          }}
+        />
+      )}
+
+      {currentTab === 'digital-twin' && (
+        <DigitalTwinView
+          station={
+            stations.find((s) => s.station_id === selectedStationId) ||
+            stations.find((s) => s.station_id === 'AWS-NAG-04') ||
+            stations[0]
+          }
+          allStations={stations}
+          onSelectStation={(id) => setSelectedStationId(id)}
+          onBackToMap={() => setCurrentTab('network-view')}
           onNavigateToLive={(id) => {
             setSelectedStationId(id);
             setCurrentTab('live-monitoring');

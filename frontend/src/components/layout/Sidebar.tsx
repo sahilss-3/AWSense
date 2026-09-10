@@ -7,6 +7,7 @@ import {
   Search,
   HeartPulse,
   MapPin,
+  Box,
   History,
   Bell,
   Sparkles,
@@ -26,6 +27,7 @@ export type NavItem =
   | 'anomaly-investigation'
   | 'sensor-health'
   | 'network-view'
+  | 'digital-twin'
   | 'historical-analysis'
   | 'alerts'
   | 'ai-insights'
@@ -56,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'anomaly-investigation', label: 'Anomaly Investigation', icon: <Search size={17} /> },
     { id: 'sensor-health', label: 'Sensor Health', icon: <HeartPulse size={17} /> },
     { id: 'network-view', label: 'Network View', icon: <MapPin size={17} /> },
+    { id: 'digital-twin', label: '3D Digital Twin', icon: <Box size={17} /> },
     { id: 'historical-analysis', label: 'Historical Analysis', icon: <History size={17} /> },
     { id: 'alerts', label: 'Alerts & Incidents', icon: <Bell size={17} />, badge: activeAlertsCount },
     { id: 'ai-insights', label: 'AI Insights', icon: <Sparkles size={17} /> },

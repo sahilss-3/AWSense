@@ -148,6 +148,20 @@ export const Station3DCanvas: React.FC<Station3DCanvasProps> = ({
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
+    // Load pristine mountain background texture directly into Three.js scene
+    const bgLoader = new THREE.TextureLoader();
+    bgLoader.load(
+      '/digital_twin_bg.jpg',
+      (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        scene.background = texture;
+      },
+      undefined,
+      (err) => {
+        console.warn('Three.js texture load fallback to container CSS background', err);
+      }
+    );
+
     // 2. Camera (Matching front-left perspective from reference)
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
     camera.position.set(2.8, 1.6, 3.4);
