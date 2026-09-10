@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: awsense
+    runtime: python
+    buildCommand: "cd frontend && npm install && npm run build && cd ../backend && pip install -r requirements.txt"
+    startCommand: "cd backend && python main.py"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: NODE_VERSION
+        value: 20.14.0
+    autoDeploy: true
+    plan: free
