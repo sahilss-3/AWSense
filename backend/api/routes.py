@@ -93,16 +93,17 @@ def get_readings(
     query = "SELECT * FROM sensor_readings WHERE station_id = ?"
     params = [station_id]
     
-    if time_window:
+    if time_window and time_window.lower() != "live":
         now = datetime.now(timezone.utc)
         delta = timedelta(hours=24)
-        if time_window.lower() == "1h":
+        tw = time_window.lower()
+        if tw == "1h":
             delta = timedelta(hours=1)
-        elif time_window.lower() == "6h":
+        elif tw == "6h":
             delta = timedelta(hours=6)
-        elif time_window.lower() == "24h":
+        elif tw == "24h":
             delta = timedelta(hours=24)
-        elif time_window.lower() == "7d":
+        elif tw == "7d":
             delta = timedelta(days=7)
         start_filter = (now - delta).isoformat()
         query += " AND timestamp >= ?"
@@ -112,6 +113,14 @@ def get_readings(
     params.append(limit)
     
     rows = c.execute(query, params).fetchall()
+
+    # Smart Fallback: If time_window filter returned fewer than 5 readings
+    # (e.g., container cold-start or sparse interval), fallback to the most recent readings
+    # for this station so the monitoring charts and readout cards are never blank.
+    if len(rows) < 5:
+        fallback_query = "SELECT * FROM sensor_readings WHERE station_id = ? ORDER BY timestamp DESC LIMIT ?"
+        rows = c.execute(fallback_query, (station_id, limit)).fetchall()
+
     conn.close()
     
     # Return chronologically ascending for chart rendering

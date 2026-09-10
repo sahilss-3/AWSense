@@ -1,10 +1,12 @@
 import uvicorn
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database.seed_data import seed_database
 from api.routes import router
+from api.telemetry_streamer import telemetry_streamer
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -12,7 +14,18 @@ async def lifespan(app: FastAPI):
     print("Initializing AWSense database and seed telemetry...")
     seed_database()
     print("AWSense database initialized successfully.")
+    
+    # Start continuous live telemetry streaming task
+    stream_task = asyncio.create_task(telemetry_streamer())
+    print("Live AWS telemetry stream started.")
+    
     yield
+    
+    stream_task.cancel()
+    try:
+        await stream_task
+    except asyncio.CancelledError:
+        pass
     print("Shutting down AWSense backend...")
 
 app = FastAPI(

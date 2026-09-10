@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   Tooltip
 } from 'recharts';
+import { Activity } from 'lucide-react';
 import { SensorReading } from '../../types';
 
 interface TimeSeriesChartProps {
@@ -53,17 +54,27 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
     }
   }[parameter];
 
-  const chartData = data.map((d) => {
+  const isMultiDay =
+    data.length > 1 &&
+    new Date(data[data.length - 1].timestamp).getTime() - new Date(data[0].timestamp).getTime() >
+      24 * 3600 * 1000;
+
+  const chartData = data.map((d, idx) => {
     let formattedTime = d.timestamp;
     try {
       const dt = new Date(d.timestamp);
-      formattedTime = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (isMultiDay) {
+        formattedTime = `${dt.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      } else {
+        formattedTime = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
     } catch (e) {
       // fallback
     }
 
     return {
       ...d,
+      chartIdx: idx,
       timeLabel: formattedTime,
       observed: d[paramConfig.dataKey as keyof SensorReading] as number | null,
       expected: d[paramConfig.expKey as keyof SensorReading] as number | null,
@@ -93,17 +104,25 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
         </span>
       </div>
 
-      <div style={{ width: '100%', height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-            <XAxis
-              dataKey="timeLabel"
-              stroke="#5B6573"
-              fontSize={11}
-              tickLine={false}
-              dy={10}
-            />
+      {data.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-[#5B6573]">
+          <Activity className="animate-spin text-[#1F4E79] mb-2" size={24} />
+          <p className="text-xs font-semibold text-[#12355B]">Synchronizing telemetry stream...</p>
+          <p className="text-[11px] text-[#5B6573] mt-0.5">Fetching active sensor cycles from automated weather station</p>
+        </div>
+      ) : (
+        <div style={{ width: '100%', height }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+              <XAxis
+                dataKey="timeLabel"
+                stroke="#5B6573"
+                fontSize={11}
+                tickLine={false}
+                dy={10}
+                minTickGap={30}
+              />
             <YAxis
               stroke="#5B6573"
               fontSize={11}
@@ -195,6 +214,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
           </LineChart>
         </ResponsiveContainer>
       </div>
+      )}
     </div>
   );
 };

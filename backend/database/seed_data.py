@@ -8,20 +8,42 @@ from ai_engine.data_generator import STATIONS_CONFIG, generate_telemetry_series
 from ai_engine.anomaly_detector import AWSAnomalyDetector
 from ai_engine.sensor_health import assess_sensor_health
 
-def seed_database():
+def seed_database(force: bool = False):
     init_db()
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Check if already seeded
-    cursor.execute("SELECT COUNT(*) FROM stations")
-    if cursor.fetchone()[0] > 0:
-        conn.close()
-        return
+    now = datetime.now(timezone.utc)
+
+    # Check if database already has fresh data (within last 30 minutes)
+    if not force:
+        cursor.execute("SELECT COUNT(*) FROM stations")
+        st_count = cursor.fetchone()[0]
+        if st_count > 0:
+            cursor.execute("SELECT MAX(timestamp) FROM sensor_readings")
+            max_row = cursor.fetchone()
+            if max_row and max_row[0]:
+                try:
+                    max_dt = datetime.fromisoformat(max_row[0])
+                    # If max reading is within last 30 minutes, it's already fresh
+                    if (now - max_dt).total_seconds() < 1800:
+                        conn.close()
+                        return
+                except Exception:
+                    pass
+
+    print(f"[{now.isoformat()}] Seeding/Refreshing AWSense telemetry dataset...")
+
+    # Wipe old data
+    cursor.execute("DELETE FROM alerts")
+    cursor.execute("DELETE FROM anomalies")
+    cursor.execute("DELETE FROM sensor_readings")
+    cursor.execute("DELETE FROM sensor_health")
+    cursor.execute("DELETE FROM stations")
+    conn.commit()
 
     detector = AWSAnomalyDetector()
-    now = datetime.now(timezone.utc)
-    start_time = now - timedelta(days=4)
+    start_time = now - timedelta(days=3)
 
     # 1. Insert Stations
     for st in STATIONS_CONFIG:
@@ -39,7 +61,7 @@ def seed_database():
     # 2. Generate and Insert Readings & Anomalies
     all_readings = []
     for st in STATIONS_CONFIG:
-        st_readings = generate_telemetry_series(st, start_time, now, interval_minutes=60)
+        st_readings = generate_telemetry_series(st, start_time, now, interval_minutes=30)
         all_readings.extend(st_readings)
 
     # Sort readings chronologically

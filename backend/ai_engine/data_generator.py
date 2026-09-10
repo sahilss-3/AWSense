@@ -138,11 +138,11 @@ def generate_telemetry_series(
     station: Dict[str, Any],
     start_dt: datetime,
     end_dt: datetime,
-    interval_minutes: int = 60
+    interval_minutes: int = 30
 ) -> List[Dict[str, Any]]:
     """
     Generates realistic historical meteorological time-series for an AWS station.
-    Injects specific real-world anomalies based on station condition.
+    Injects specific real-world anomalies based on station condition relative to current time.
     """
     records = []
     curr_dt = start_dt
@@ -150,6 +150,7 @@ def generate_telemetry_series(
 
     total_steps = int((end_dt - start_dt).total_seconds() / (interval_minutes * 60))
     step_idx = 0
+    sph = max(1, int(60 / interval_minutes))
 
     base_t = station["base_temp"]
     base_p = station["base_press"]
@@ -158,61 +159,61 @@ def generate_telemetry_series(
     while curr_dt <= end_dt:
         hour = curr_dt.hour + curr_dt.minute / 60.0
         
-        # Diurnal curves
-        diurnal_t = base_t + 5.5 * np.sin(2 * np.pi * (hour - 8.5) / 24.0) + np.random.normal(0, 0.35)
-        diurnal_p = base_p + 1.2 * np.sin(4 * np.pi * (hour - 4.0) / 24.0) + np.random.normal(0, 0.2)
-        diurnal_h = base_h - 18.0 * np.sin(2 * np.pi * (hour - 8.5) / 24.0) + np.random.normal(0, 1.2)
-        
+        # Smooth theoretical expected baseline
+        exp_t = round(base_t + 5.5 * np.sin(2 * np.pi * (hour - 8.5) / 24.0), 2)
+        exp_p = round(base_p + 1.2 * np.sin(4 * np.pi * (hour - 4.0) / 24.0), 2)
+        exp_h = round(base_h - 18.0 * np.sin(2 * np.pi * (hour - 8.5) / 24.0), 2)
+        exp_h = max(15.0, min(96.0, exp_h))
+
+        # Raw observations with natural sensor noise
+        diurnal_t = exp_t + np.random.normal(0, 0.35)
+        diurnal_p = exp_p + np.random.normal(0, 0.20)
+        diurnal_h = exp_h + np.random.normal(0, 1.20)
         diurnal_h = max(15.0, min(96.0, diurnal_h))
 
         obs_t = round(diurnal_t, 2)
         obs_p = round(diurnal_p, 2)
         obs_h = round(diurnal_h, 2)
-        
-        exp_t = round(diurnal_t, 2)
-        exp_p = round(diurnal_p, 2)
-        exp_h = round(diurnal_h, 2)
 
         is_anom = 0
         anom_id = None
 
         # Inject anomalies into specific stations toward the end of the timeline
         # AWS-PUN-01: Temperature drift over last 18 hours
-        if station["station_id"] == "AWS-PUN-01" and step_idx > (total_steps - 18):
-            drift_offset = (step_idx - (total_steps - 18)) * 0.45
+        if station["station_id"] == "AWS-PUN-01" and step_idx > (total_steps - 18 * sph):
+            drift_offset = (step_idx - (total_steps - 18 * sph)) * (0.45 / sph)
             obs_t = round(obs_t + drift_offset, 2)
-            if drift_offset > 3.0:
+            if drift_offset > 2.5:
                 is_anom = 1
 
-        # AWS-NAG-04: Sudden spike at 3 hours ago, and sudden drop 2 hours ago
+        # AWS-NAG-04: Sudden spike at 3 hours ago, sudden drop at 8 hours ago, frozen pressure last 6 hours
         elif station["station_id"] == "AWS-NAG-04":
-            if step_idx == (total_steps - 4): # Sudden Spike: 31.8 -> 89.6
+            if step_idx == (total_steps - 3 * sph): # Sudden Spike: 31.8 -> 89.6
                 obs_t = 89.6
                 is_anom = 1
-            elif step_idx == (total_steps - 12): # Sudden Drop: 32.0 -> -10.0
+            elif step_idx == (total_steps - 8 * sph): # Sudden Drop: 32.0 -> -10.0
                 obs_t = -10.0
                 is_anom = 1
-            elif step_idx > (total_steps - 8): # Pressure frozen
+            elif step_idx > (total_steps - 6 * sph): # Pressure frozen
                 obs_p = 978.4
                 is_anom = 1
 
-        # AWS-KOL-06: Frozen humidity sensor for the last 10 hours
-        elif station["station_id"] == "AWS-KOL-06" and step_idx > (total_steps - 10):
+        # AWS-KOL-06: Frozen humidity sensor for the last 10 hours (Temp & Press are normal)
+        elif station["station_id"] == "AWS-KOL-06" and step_idx > (total_steps - 10 * sph):
             obs_h = 72.4
             is_anom = 1
 
-        # AWS-SAT-07: Missing data (Offline station)
-        elif station["station_id"] == "AWS-SAT-07" and step_idx > (total_steps - 16):
+        # AWS-SAT-07: Missing data (Offline station) for the last 4 hours
+        elif station["station_id"] == "AWS-SAT-07" and step_idx > (total_steps - 4 * sph):
             obs_t = None
             obs_p = None
             obs_h = None
             is_anom = 1
 
-        # AWS-MUM-03: Genuine meteorological event (coastal solar warming & sea breeze shift)
-        elif station["station_id"] == "AWS-MUM-03" and step_idx == (total_steps - 2):
-            # T rises from 31.0 -> 35.1 while RH drops from 74% -> 58%
-            obs_t = 35.1
-            obs_h = 58.0
+        # AWS-MUM-03: Genuine meteorological event (coastal thermal rise & sea breeze shift at 2 hours ago)
+        elif station["station_id"] == "AWS-MUM-03" and step_idx == (total_steps - 2 * sph):
+            obs_t = round(base_t + 4.8, 1)
+            obs_h = round(base_h - 18.5, 1)
             is_anom = 0 # Classified as Genuine Event
 
         records.append({

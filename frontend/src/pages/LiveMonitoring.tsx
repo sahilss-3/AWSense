@@ -36,24 +36,32 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({
   const [loading, setLoading] = useState(false);
   const [inspectPoint, setInspectPoint] = useState<SensorReading | null>(null);
 
-  const fetchReadings = async () => {
-    setLoading(true);
+  const fetchReadings = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await api.getReadings(selectedStationId, 120, timeWindow);
       setReadings(data);
       if (data.length > 0) {
         const latestAnom = [...data].reverse().find((d) => d.is_anomaly === 1);
-        setInspectPoint(latestAnom || data[data.length - 1]);
+        setInspectPoint((prev) => {
+          if (!prev) return latestAnom || data[data.length - 1];
+          const matched = data.find((d) => d.timestamp === prev.timestamp);
+          return matched || latestAnom || data[data.length - 1];
+        });
       }
     } catch (e) {
       console.error('Failed to load readings', e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchReadings();
+    fetchReadings(false);
+    const interval = setInterval(() => {
+      fetchReadings(true);
+    }, 15000);
+    return () => clearInterval(interval);
   }, [selectedStationId, timeWindow]);
 
   const currentStation = stations.find((s) => s.station_id === selectedStationId) || stations[0];
@@ -123,7 +131,7 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({
           </div>
 
           <button
-            onClick={fetchReadings}
+            onClick={() => fetchReadings(false)}
             className="rounded-md border border-[#D9DEE5] bg-white p-2 text-[#5B6573] hover:bg-[#F4F6F8] hover:text-[#12355B] transition-colors"
             title="Refresh stream"
           >
@@ -152,6 +160,8 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({
             <span className="text-2xl font-bold font-mono text-[#1F2937]">
               {latestReading?.temperature !== null && latestReading?.temperature !== undefined
                 ? `${latestReading.temperature}°C`
+                : currentStation.status === 'OFFLINE'
+                ? 'OFFLINE'
                 : '—'}
             </span>
             <span className="text-xs font-mono text-[#5B6573]">
@@ -178,6 +188,8 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({
             <span className="text-2xl font-bold font-mono text-[#1F2937]">
               {latestReading?.pressure !== null && latestReading?.pressure !== undefined
                 ? `${latestReading.pressure} hPa`
+                : currentStation.status === 'OFFLINE'
+                ? 'OFFLINE'
                 : '—'}
             </span>
             <span className="text-xs font-mono text-[#5B6573]">
@@ -204,6 +216,8 @@ export const LiveMonitoring: React.FC<LiveMonitoringProps> = ({
             <span className="text-2xl font-bold font-mono text-[#1F2937]">
               {latestReading?.humidity !== null && latestReading?.humidity !== undefined
                 ? `${latestReading.humidity}%`
+                : currentStation.status === 'OFFLINE'
+                ? 'OFFLINE'
                 : '—'}
             </span>
             <span className="text-xs font-mono text-[#5B6573]">
