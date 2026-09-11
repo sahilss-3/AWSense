@@ -70,9 +70,9 @@ STATIONS_CONFIG = [
     },
     {
         "station_id": "AWS-AUR-05",
-        "name": "AWS Aurangabad-05",
+        "name": "AWS Chhatrapati Sambhajinagar-05",
         "location": "Chhatrapati Sambhajinagar Met Station",
-        "district": "Aurangabad",
+        "district": "Chhatrapati Sambhajinagar",
         "latitude": 19.8762,
         "longitude": 75.3433,
         "elevation": 568.0,

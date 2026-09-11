@@ -692,6 +692,8 @@ export const NetworkView: React.FC<NetworkViewProps> = ({
               }
 
               const isHovered = hoveredStationId === id;
+              const pillWidth = Math.max(74, pos.code.length * 6.0 + 16);
+              const tooltipWidth = Math.max(128, pos.code.length * 6.2 + 20);
 
               return (
                 <g
@@ -771,7 +773,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({
                     <rect
                       x="0"
                       y="0"
-                      width="74"
+                      width={pillWidth}
                       height="34"
                       rx="6"
                       fill="#FFFFFF"
@@ -813,7 +815,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({
                       <rect
                         x="0"
                         y="0"
-                        width="128"
+                        width={tooltipWidth}
                         height="44"
                         rx="6"
                         fill="#FFFFFF"
